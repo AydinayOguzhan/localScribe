@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0B0D10;
+  --surface: #12161C;
+  --elevated: #181D25;
+  --border: #252B35;
+  --text: #F4F6F8;
+  --muted: #9AA4B2;
+  --accent: #7C6CF2;
+  --accent-hover: #8D7FF5;
+  --success: #48C78E;
+  --warning: #E6A94A;
+  --danger: #E35D6A;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-width: 100%; min-height: 100%; margin: 0; }
+body { overflow: hidden; user-select: none; }
+button, input, select, textarea { font: inherit; }
+button, select { -webkit-app-region: no-drag; }
+textarea, input { user-select: text; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); }
+.elevated { background: var(--elevated); border: 1px solid var(--border); }
+.button-primary, .button-secondary, .button-danger, .button-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  min-height: 40px; border-radius: 10px; padding: 0 16px; font-weight: 650;
+  border: 1px solid transparent; cursor: pointer; transition: 160ms ease;
+}
+.button-primary { background: var(--accent); color: white; }
+.button-primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
+.button-secondary { background: var(--elevated); color: var(--text); border-color: var(--border); }
+.button-secondary:hover:not(:disabled), .button-ghost:hover:not(:disabled) { border-color: #3b4350; background: #1d232d; }
+.button-danger { color: #ff9ba4; border-color: #583039; background: #27191e; }
+.button-ghost { color: var(--muted); background: transparent; }
+button:disabled { opacity: .48; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field {
+  width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--elevated); color: var(--text); padding: 0 12px;
+}
+.progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: #252b35; }
+.progress-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width 180ms ease; }
+.scrollbar { scrollbar-color: #323a46 transparent; scrollbar-width: thin; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

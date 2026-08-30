@@ -1,0 +1,77 @@
+# Dependencies
+/node_modules/
+
+# Compiled output and distributable artifacts
+/out/
+/release/
+/dist/
+/coverage/
+/test-results/
+*.dmg
+*.pkg
+*.zip
+*.7z
+*.rar
+*.exe
+*.msi
+*.AppImage
+*.blockmap
+*.asar
+
+# Local runtime/model payloads and interrupted downloads
+/runtime/
+/models/
+/downloads/
+/temp/
+/config/
+/logs/
+ggml-*.bin
+*.part
+*.archive
+
+# Logs, crash dumps, and temporary caches
+*.log
+*.dmp
+*.crash
+*.tmp
+*.temp
+*.swp
+*.swo
+.cache/
+.vite/
+.eslintcache
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment and package-registry credentials
+.env
+.env.*
+!.env.example
+.npmrc
+
+# Signing identities, certificates, and provisioning material
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+*.provisionprofile
+*.mobileprovision
+
+# Editors and local agent metadata
+.idea/
+.vscode/
+.codex/
+.agents/
+
+# Operating-system metadata
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
