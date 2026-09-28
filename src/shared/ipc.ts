@@ -2,16 +2,19 @@ import type {
   AppSettings,
   DownloadProgress,
   ExportRequest,
+  HistoryRecord,
+  HistorySummary,
   MediaMetadata,
   ModelId,
   ModelView,
+  QueueAddRequest,
+  QueueResult,
+  QueueSnapshot,
   SetupStatus,
   StorageInfo,
   SystemInfo,
-  TranscriptionCompleted,
-  TranscriptionProgress,
-  TranscriptionRequest,
-  RuntimeInfo
+  RuntimeInfo,
+  TranscriptSegment
 } from './types'
 
 export const IPC = {
@@ -27,12 +30,21 @@ export const IPC = {
   modelsDelete: 'models:delete',
   modelsRepair: 'models:repair',
   fileChoose: 'file:choose',
+  fileChooseMany: 'file:choose-many',
   mediaInspect: 'media:inspect',
-  transcriptionStart: 'transcription:start',
-  transcriptionCancel: 'transcription:cancel',
-  transcriptionProgress: 'transcription:progress',
-  transcriptionCompleted: 'transcription:completed',
-  transcriptionError: 'transcription:error',
+  queueGet: 'queue:get',
+  queueGetResult: 'queue:get-result',
+  queueAdd: 'queue:add',
+  queueCancel: 'queue:cancel',
+  queueCancelAll: 'queue:cancel-all',
+  queueRetry: 'queue:retry',
+  queueChanged: 'queue:changed',
+  historyList: 'history:list',
+  historyGet: 'history:get',
+  historyUpdateSegments: 'history:update-segments',
+  historyDelete: 'history:delete',
+  historyClear: 'history:clear',
+  historyChanged: 'history:changed',
   exportSave: 'export:save',
   clipboardCopy: 'clipboard:copy',
   settingsGet: 'settings:get',
@@ -60,14 +72,24 @@ export interface LocalScribeApi {
     delete(modelId: ModelId): Promise<ModelView[]>
     repair(modelId: ModelId): Promise<ModelView[]>
   }
-  file: { choose(): Promise<string | null>; path(file: File): string }
+  file: { choose(): Promise<string | null>; chooseMany(): Promise<string[]>; path(file: File): string }
   media: { inspect(path: string): Promise<MediaMetadata> }
-  transcription: {
-    start(request: TranscriptionRequest): Promise<string>
-    cancel(): Promise<void>
-    onProgress(callback: (progress: TranscriptionProgress) => void): () => void
-    onCompleted(callback: (result: TranscriptionCompleted) => void): () => void
-    onError(callback: (error: { message: string; details?: string }) => void): () => void
+  queue: {
+    get(): Promise<QueueSnapshot>
+    getResult(itemId: string): Promise<QueueResult | null>
+    add(requests: QueueAddRequest[]): Promise<QueueSnapshot>
+    cancel(itemId: string): Promise<QueueSnapshot>
+    cancelAll(): Promise<QueueSnapshot>
+    retry(itemId: string): Promise<QueueSnapshot>
+    onChanged(callback: (snapshot: QueueSnapshot) => void): () => void
+  }
+  history: {
+    list(): Promise<HistorySummary[]>
+    get(id: string): Promise<HistoryRecord | null>
+    updateSegments(id: string, segments: TranscriptSegment[]): Promise<HistoryRecord | null>
+    delete(id: string): Promise<void>
+    clear(): Promise<void>
+    onChanged(callback: () => void): () => void
   }
   export: { save(request: ExportRequest): Promise<string | null> }
   clipboard: { copy(text: string): Promise<void> }

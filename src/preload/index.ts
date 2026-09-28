@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type LocalScribeApi } from '../shared/ipc'
-import type { DownloadProgress, FriendlyError, TranscriptionCompleted, TranscriptionProgress } from '../shared/types'
+import type { DownloadProgress, QueueSnapshot } from '../shared/types'
 
 function subscription<T>(channel: string, callback: (value: T) => void): () => void {
   const listener = (_event: Electron.IpcRendererEvent, value: T): void => callback(value)
@@ -24,14 +24,28 @@ const api: LocalScribeApi = {
     delete: (modelId) => ipcRenderer.invoke(IPC.modelsDelete, modelId),
     repair: (modelId) => ipcRenderer.invoke(IPC.modelsRepair, modelId)
   },
-  file: { choose: () => ipcRenderer.invoke(IPC.fileChoose), path: (file) => webUtils.getPathForFile(file) },
+  file: {
+    choose: () => ipcRenderer.invoke(IPC.fileChoose),
+    chooseMany: () => ipcRenderer.invoke(IPC.fileChooseMany),
+    path: (file) => webUtils.getPathForFile(file)
+  },
   media: { inspect: (path) => ipcRenderer.invoke(IPC.mediaInspect, path) },
-  transcription: {
-    start: (request) => ipcRenderer.invoke(IPC.transcriptionStart, request),
-    cancel: () => ipcRenderer.invoke(IPC.transcriptionCancel),
-    onProgress: (callback) => subscription<TranscriptionProgress>(IPC.transcriptionProgress, callback),
-    onCompleted: (callback) => subscription<TranscriptionCompleted>(IPC.transcriptionCompleted, callback),
-    onError: (callback) => subscription<FriendlyError>(IPC.transcriptionError, callback)
+  queue: {
+    get: () => ipcRenderer.invoke(IPC.queueGet),
+    getResult: (itemId) => ipcRenderer.invoke(IPC.queueGetResult, itemId),
+    add: (requests) => ipcRenderer.invoke(IPC.queueAdd, requests),
+    cancel: (itemId) => ipcRenderer.invoke(IPC.queueCancel, itemId),
+    cancelAll: () => ipcRenderer.invoke(IPC.queueCancelAll),
+    retry: (itemId) => ipcRenderer.invoke(IPC.queueRetry, itemId),
+    onChanged: (callback) => subscription<QueueSnapshot>(IPC.queueChanged, callback)
+  },
+  history: {
+    list: () => ipcRenderer.invoke(IPC.historyList),
+    get: (id) => ipcRenderer.invoke(IPC.historyGet, id),
+    updateSegments: (id, segments) => ipcRenderer.invoke(IPC.historyUpdateSegments, { id, segments }),
+    delete: (id) => ipcRenderer.invoke(IPC.historyDelete, id),
+    clear: () => ipcRenderer.invoke(IPC.historyClear),
+    onChanged: (callback) => subscription<null>(IPC.historyChanged, callback)
   },
   export: { save: (request) => ipcRenderer.invoke(IPC.exportSave, request) },
   clipboard: { copy: (text) => ipcRenderer.invoke(IPC.clipboardCopy, text) },

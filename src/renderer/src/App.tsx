@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Box, Home as HomeIcon, Settings as SettingsIcon } from 'lucide-react'
+import { Box, History as HistoryIcon, Home as HomeIcon, Settings as SettingsIcon } from 'lucide-react'
 import type { SetupStatus } from '../../shared/types'
 import { Brand } from './components/Brand'
 import { SetupWizard } from './pages/SetupWizard'
 import { HomePage } from './pages/HomePage'
+import { HistoryPage } from './pages/HistoryPage'
 import { ModelsPage } from './pages/ModelsPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-type Page = 'home' | 'models' | 'settings'
+type Page = 'home' | 'history' | 'models' | 'settings'
 
 export function App(): React.JSX.Element {
   const [status, setStatus] = useState<SetupStatus | null>(null)
@@ -21,6 +22,7 @@ export function App(): React.JSX.Element {
       <div className="px-2 py-3"><Brand compact /></div>
       <nav className="mt-7 space-y-1" aria-label="Main navigation">
         <NavButton icon={<HomeIcon />} label="Home" active={page === 'home'} onClick={() => setPage('home')} />
+        <NavButton icon={<HistoryIcon />} label="History" active={page === 'history'} onClick={() => setPage('history')} />
         <NavButton icon={<Box />} label="Models" active={page === 'models'} onClick={() => setPage('models')} />
         <NavButton icon={<SettingsIcon />} label="Settings" active={page === 'settings'} onClick={() => setPage('settings')} />
       </nav>
@@ -28,6 +30,7 @@ export function App(): React.JSX.Element {
     </aside>
     <section className="min-w-0 flex-1">
       <div className={page === 'home' ? 'block' : 'hidden'}><HomePage active={page === 'home'} /></div>
+      {page === 'history' && <HistoryPage active />}
       {page === 'models' && <ModelsPage />}
       {page === 'settings' && <SettingsPage />}
     </section>

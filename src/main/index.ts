@@ -7,6 +7,7 @@ import { WhisperCliAdapter } from './adapters/WhisperCliAdapter'
 import { registerIpc } from './ipc/registerIpc'
 import { resolvePlatform } from './utils/platform'
 import { DownloadManager } from './services/DownloadManager'
+import { HistoryStore } from './services/HistoryStore'
 import { InstallationStore } from './services/InstallationStore'
 import { JobManager } from './services/JobManager'
 import { Logger } from './services/Logger'
@@ -19,6 +20,8 @@ import { SettingsService } from './services/SettingsService'
 import { SystemInfoService } from './services/SystemInfoService'
 import { TempFileService } from './services/TempFileService'
 import { TranscriptionService } from './services/TranscriptionService'
+import { TranscriptionQueueService } from './services/TranscriptionQueueService'
+import { AudioPreparationService } from './services/AudioPreparationService'
 import { PRODUCTION_CSP, RENDERER_SCHEME, RENDERER_URL, resolveRendererAsset } from './utils/rendererProtocol'
 
 protocol.registerSchemesAsPrivileged([{
@@ -28,6 +31,7 @@ protocol.registerSchemesAsPrivileged([{
 
 let mainWindow: BrowserWindow | null = null
 let processes: ProcessManager | null = null
+let historyStore: HistoryStore | null = null
 let createWindow: (() => Promise<void>) | null = null
 
 async function bootstrap(): Promise<void> {
@@ -49,6 +53,9 @@ async function bootstrap(): Promise<void> {
   const installations = new InstallationStore(paths)
   await Promise.all([settings.load(), installations.load()])
   const logger = new Logger(paths)
+  const history = new HistoryStore(paths, logger)
+  await history.load()
+  historyStore = history
   const system = new SystemInfoService(paths)
   const downloads = new DownloadManager()
   processes = new ProcessManager()
@@ -62,9 +69,11 @@ async function bootstrap(): Promise<void> {
   const models = new ModelManager(paths, downloads, installations, settings, () => system.getInfo(), (id) => jobs.isUsing(id), logger)
   const ffmpeg = new FfmpegAdapter(() => runtime.getExecutable('ffmpeg'), processes)
   const whisper = new WhisperCliAdapter(() => runtime.getExecutable('whisper'), processes)
-  const transcription = new TranscriptionService(jobs, media, models, ffmpeg, whisper, processes, tempFiles, paths, settings, system, logger)
+  const audioPreparation = new AudioPreparationService(ffmpeg, logger)
+  const transcription = new TranscriptionService(jobs, media, models, audioPreparation, ffmpeg, whisper, processes, tempFiles, paths, settings, system, logger, () => runtime.getVadModelPath())
+  const queue = new TranscriptionQueueService(transcription, media, history, logger)
 
-  registerIpc({ windows: () => BrowserWindow.getAllWindows(), runtime, models, media, transcription, jobs, settings, system, paths, tempFiles })
+  registerIpc({ windows: () => BrowserWindow.getAllWindows(), runtime, models, media, queue, history, jobs, settings, system, paths, tempFiles })
 
   createWindow = async () => {
     const bounds = settings.get().windowBounds
@@ -122,5 +131,9 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   const active = processes
   processes = null
-  active.terminateAll().finally(() => app.exit(0))
+  active.terminateAll().finally(() => {
+    historyStore?.close()
+    historyStore = null
+    app.exit(0)
+  })
 })

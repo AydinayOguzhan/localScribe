@@ -3,7 +3,9 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { IPC } from '../../shared/ipc'
-import type { AppSettings, DownloadProgress, FriendlyError, ModelId, TranscriptionCompleted, TranscriptionProgress } from '../../shared/types'
+import type { AppSettings, DownloadProgress, ModelId, QueueSnapshot } from '../../shared/types'
+import { MAX_QUEUE_ITEMS } from '../../shared/types'
+import type { HistoryStore } from '../services/HistoryStore'
 import type { JobManager } from '../services/JobManager'
 import type { MediaService } from '../services/MediaService'
 import type { ModelManager } from '../services/ModelManager'
@@ -12,26 +14,32 @@ import type { RuntimeManager } from '../services/RuntimeManager'
 import type { SettingsService } from '../services/SettingsService'
 import type { SystemInfoService } from '../services/SystemInfoService'
 import type { TempFileService } from '../services/TempFileService'
-import type { TranscriptionService } from '../services/TranscriptionService'
+import type { TranscriptionQueueService } from '../services/TranscriptionQueueService'
 import { RENDERER_URL } from '../utils/rendererProtocol'
 
 const modelId = z.enum(['tiny', 'base', 'small', 'medium', 'large-v3-turbo'])
 const languageId = z.enum(['auto', 'tr', 'en', 'ru', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'uk', 'nl', 'ja', 'ko', 'zh', 'ar', 'hi'])
 const pathValue = z.string().min(1).max(32_768)
-const transcriptionRequest = z.object({ mediaPath: pathValue, modelId, language: languageId, timestamps: z.boolean() }).strict()
 const settingsPatch = z.object({
   setupComplete: z.boolean().optional(), activeModel: modelId.nullable().optional(),
   performanceProfile: z.enum(['quiet', 'balanced', 'performance']).optional(),
   hardwareAcceleration: z.enum(['auto', 'cpu']).optional(), defaultLanguage: languageId.optional(),
   timestamps: z.boolean().optional()
 }).strict()
+const queueRequest = z.object({ mediaPath: pathValue, modelId, language: languageId, timestamps: z.boolean() }).strict()
+const queueRequests = z.array(queueRequest).min(1).max(MAX_QUEUE_ITEMS)
+const identifier = z.string().uuid()
+const transcriptSegment = z.object({
+  startMs: z.number().int().nonnegative(), endMs: z.number().int().nonnegative(), text: z.string().max(1_000_000)
+}).strict().refine((segment) => segment.endMs >= segment.startMs, 'Segment end must not precede its start')
 
 export interface IpcServices {
   windows: () => BrowserWindow[]
   runtime: RuntimeManager
   models: ModelManager
   media: MediaService
-  transcription: TranscriptionService
+  queue: TranscriptionQueueService
+  history: HistoryStore
   jobs: JobManager
   settings: SettingsService
   system: SystemInfoService
@@ -66,9 +74,8 @@ export function registerIpc(services: IpcServices): void {
   }
   const progress = (value: DownloadProgress): void => send(IPC.downloadProgress, value)
 
-  services.transcription.on('progress', (value: TranscriptionProgress) => send(IPC.transcriptionProgress, value))
-  services.transcription.on('completed', (value: TranscriptionCompleted) => send(IPC.transcriptionCompleted, value))
-  services.transcription.on('failed', (value: FriendlyError) => send(IPC.transcriptionError, value))
+  services.queue.on('changed', (value: QueueSnapshot) => send(IPC.queueChanged, value))
+  services.queue.on('history-changed', () => send(IPC.historyChanged, null))
 
   handle(IPC.systemInfo, () => services.system.getInfo())
   handle(IPC.setupStatus, () => services.runtime.getStatus())
@@ -96,10 +103,40 @@ export function registerIpc(services: IpcServices): void {
     })
     return result.canceled ? null : result.filePaths[0] ?? null
   })
+  handle(IPC.fileChooseMany, async () => {
+    const result = await dialog.showOpenDialog({
+      title: `Choose up to ${MAX_QUEUE_ITEMS} audio or video files`, properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Audio and video', extensions: ['mp4', 'mkv', 'mov', 'webm', 'avi', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'wma'] }, { name: 'All files', extensions: ['*'] }]
+    })
+    if (result.canceled) return []
+    if (result.filePaths.length > MAX_QUEUE_ITEMS) throw new Error(`Select at most ${MAX_QUEUE_ITEMS} files at a time.`)
+    return result.filePaths
+  })
   handle(IPC.mediaInspect, (_event, raw: unknown) => services.media.inspect(pathValue.parse(raw)))
 
-  handle(IPC.transcriptionStart, (_event, raw: unknown) => services.transcription.start(transcriptionRequest.parse(raw)))
-  handle(IPC.transcriptionCancel, () => services.transcription.cancel())
+  handle(IPC.queueGet, () => services.queue.getSnapshot())
+  handle(IPC.queueGetResult, (_event, raw: unknown) => services.queue.getResult(identifier.parse(raw)))
+  handle(IPC.queueAdd, (_event, raw: unknown) => services.queue.add(queueRequests.parse(raw)))
+  handle(IPC.queueCancel, (_event, raw: unknown) => services.queue.cancel(identifier.parse(raw)))
+  handle(IPC.queueCancelAll, () => services.queue.cancelAll())
+  handle(IPC.queueRetry, (_event, raw: unknown) => services.queue.retry(identifier.parse(raw)))
+
+  handle(IPC.historyList, () => services.history.list())
+  handle(IPC.historyGet, (_event, raw: unknown) => services.history.get(identifier.parse(raw)))
+  handle(IPC.historyUpdateSegments, (_event, raw: unknown) => {
+    const value = z.object({ id: identifier, segments: z.array(transcriptSegment).max(250_000) }).strict().parse(raw)
+    const record = services.history.updateSegments(value.id, value.segments)
+    send(IPC.historyChanged, null)
+    return record
+  })
+  handle(IPC.historyDelete, (_event, raw: unknown) => {
+    services.history.delete(identifier.parse(raw))
+    send(IPC.historyChanged, null)
+  })
+  handle(IPC.historyClear, () => {
+    services.history.clear()
+    send(IPC.historyChanged, null)
+  })
 
   handle(IPC.exportSave, async (_event, raw: unknown) => {
     const request = z.object({

@@ -4,18 +4,20 @@
 
 LocalScribe is a private, offline-first desktop transcription app for Windows and macOS. Pick or drop an audio/video file, run local speech recognition, edit the result, and save UTF-8 TXT, SRT, or VTT. There are no accounts, APIs, uploads, subscriptions, telemetry, artificial duration limits, or artificial file-size limits.
 
-The installer contains only the Electron application. FFmpeg, ffprobe, whisper.cpp, and Whisper models are downloaded by the in-app first-run wizard, checksum-verified, and stored outside the application package. Once setup is complete, transcription itself makes no network requests.
+The installer contains only the Electron application. FFmpeg, ffprobe, whisper.cpp, Silero VAD, and Whisper models are downloaded by the in-app first-run wizard, checksum-verified, and stored outside the application package. Once setup is complete, transcription itself makes no network requests.
 
 ## MVP features
 
 - Secure five-step first-run setup with host detection and resumable component/model downloads
 - Multilingual Tiny, Base, Small, Medium, and Large v3 Turbo models
 - Fast startup using metadata and file-size checks rather than repeated multi-gigabyte hashing
-- ffprobe stream validation; extensions are used only for the file picker
+- automatic ffprobe/FFmpeg analysis and selection of the most useful audio stream; extensions are used only for the file picker
+- automatic complementary-track mixing and stereo-channel recovery without exposing technical stream controls
 - streamed FFmpeg conversion to 16 kHz, mono, signed 16-bit PCM WAV
-- exactly one isolated whisper.cpp inference per file, parsed into canonical timestamped segments
+- local VAD, speech-based language detection, hallucination checks, and bounded automatic recovery
+- a maximum-10 batch queue with exactly one isolated whisper.cpp inference at a time
 - live extraction/transcription stages, throttled progress, cancellation, and process-tree cleanup
-- local segment editing, clipboard copy, and TXT/SRT/VTT export
+- local segment editing with autosave, latest-10 transcript history, clipboard copy, and TXT/SRT/VTT export
 - Quiet, Balanced, and Performance CPU profiles; CPU fallback and optional Metal in Auto mode
 - model download, selection, deletion, and full repair/verification
 - disk-space estimation before WAV extraction and safe abandoned-job cleanup
@@ -29,11 +31,12 @@ The installer contains only the Electron application. FFmpeg, ffprobe, whisper.c
 - Tailwind CSS 4 using a small local design-token layer
 - Lucide React icons
 - Zod validation at IPC trust boundaries
+- Electron's built-in SQLite for local transcript history; no third-party native database module
 - Node streams, native `child_process.spawn`, and allowlisted streaming ZIP extraction with `yauzl`
 - Vitest and ESLint
 - electron-builder with NSIS, DMG, and ZIP targets
 
-There is no Python, PyTorch, Docker, database, local server, backend API, or large UI framework.
+There is no Python, PyTorch, Docker, external database service, local server, backend API, or large UI framework.
 
 ## Architecture
 
@@ -41,13 +44,14 @@ There is no Python, PyTorch, Docker, database, local server, backend API, or lar
 React renderer
   ↕ minimal typed preload API
 Electron main process
-  ├─ PathService / SettingsService / InstallationStore
+  ├─ PathService / SettingsService / InstallationStore / HistoryStore
   ├─ DownloadManager → streamed .part → checksum → atomic rename
   ├─ RuntimeManager / ModelManager
   ├─ MediaService → FfprobeAdapter
-  └─ TranscriptionService / JobManager
-       ├─ FfmpegAdapter → audio.wav on disk
-       └─ WhisperCliAdapter → one JSON result on disk
+  └─ TranscriptionQueueService → TranscriptionService / JobManager
+       ├─ AudioPreparationService / FfmpegAdapter → ranked audio.wav candidates
+       ├─ Silero VAD → spoken sections and language sample
+       └─ WhisperCliAdapter / TranscriptQualityService → checked JSON result
                               ↓
                      canonical TranscriptResult
                        ↙       ↓       ↘
@@ -82,15 +86,17 @@ userData/
   runtime/
     ffmpeg/9.0.1/...
     whisper/openwhispr-1.0.0/...
+    vad/6.2.0/...
   models/ggml-*.bin
   downloads/*.part
   temp/<job-id>/
   config/settings.json
   config/installed-components.json
+  config/history.sqlite
   logs/localscribe.log
 ```
 
-Settings and installation metadata use temporary-write plus atomic rename. Successful installation is recorded only after checksum verification, extraction, expected-file validation, executable permissions, and atomic directory finalization. Interrupted `.part` files remain resumable when the server supports HTTP Range. Retries are limited and exponential. Normal startup checks metadata, file existence, and model size; **Verify / Repair** performs full archive/model hashing only on demand.
+Settings and installation metadata use temporary-write plus atomic rename. Transcript history uses the operating system's user-only application data directory, SQLite transactions, foreign keys, and secure deletion; original media paths and media payloads are never stored in the database. Successful installation is recorded only after checksum verification, extraction, expected-file validation, executable permissions, and atomic directory finalization. Interrupted `.part` files remain resumable when the server supports HTTP Range. Retries are limited and exponential. Normal startup checks metadata, file existence, and model size; **Verify / Repair** performs full archive/model hashing only on demand.
 
 Temporary directories are UUID-owned children of the LocalScribe temp root. Cleanup guards reject paths outside that root. Converted audio is written and read directly from disk; Electron never buffers an entire media file, model, or download.
 
@@ -102,6 +108,7 @@ Runtime definitions and their exact SHA-256 values are in `src/main/manifests/ru
 - **FFmpeg 9.0.1, macOS Intel/Apple Silicon:** Evermeet static release ZIPs for FFmpeg and ffprobe. Evermeet is linked by the official FFmpeg download page and publishes signed static macOS builds.
 - **whisper.cpp CLI, Windows x64:** the official upstream ggml-org v1.9.1 CPU release, including its required dispatch DLLs. LocalScribe does not silently fetch CUDA libraries.
 - **whisper.cpp CLI, macOS:** OpenWhispr's source-visible v1.0.0 release builds provide the missing macOS CLI assets, including Metal on Apple Silicon, with GitHub-published SHA-256 digests.
+- **Voice activity detection:** the official ggml-org `ggml-silero-v6.2.0.bin` model is pinned by exact size and SHA-256 and runs entirely on-device through whisper.cpp.
 - **Models:** multilingual GGML model files from `ggerganov/whisper.cpp` on Hugging Face. Their exact file sizes and SHA-256 LFS/Xet object IDs are pinned. English-only `.en` variants are intentionally excluded from the standard UI.
 
 Run `npm run runtime:verify` to perform lightweight HEAD/redirect checks of every manifest URL. It does not download model payloads. Update pins only after reviewing upstream release notes, archive layouts, sizes, and published digests (or calculating the digest of an immutable versioned archive).
@@ -205,4 +212,4 @@ LocalScribe accesses the network only when installing or repairing declared runt
 
 ## MVP boundaries and future work
 
-The MVP intentionally omits accounts, cloud sync/transcription, payments, summarization, translation, diarization, transcript history, waveforms, automatic updates, and simultaneous multi-file inference. The canonical segment model, backend adapter, and single-job manager leave clear extension points for diarization, a batch queue, synchronized playback, click-to-seek, translation, and opt-in transcript history without rewriting the native pipeline.
+The MVP intentionally omits accounts, cloud sync/transcription, payments, summarization, translation, diarization, waveforms, automatic updates, and simultaneous multi-file inference. Batch files are deliberately processed sequentially so a queue does not multiply CPU and memory pressure. The canonical segment model still leaves clear extension points for diarization, synchronized playback, click-to-seek, and translation.

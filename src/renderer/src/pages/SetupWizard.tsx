@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, CheckCircle2, ChevronRight, Cpu, Database, Download, HardDrive, MemoryStick, ShieldCheck, Sparkles } from 'lucide-react'
+import { AudioWaveform, Check, CheckCircle2, ChevronRight, Cpu, Database, Download, HardDrive, MemoryStick, ShieldCheck, Sparkles } from 'lucide-react'
 import type { DownloadProgress, ModelId, ModelView, SetupStatus, SystemInfo } from '../../../shared/types'
 import { Brand } from '../components/Brand'
 import { ErrorBanner } from '../components/ErrorBanner'
@@ -8,7 +8,8 @@ import { ProgressBar } from '../components/ProgressBar'
 import { errorMessage, formatBytes } from '../utils'
 
 export function SetupWizard({ initialStatus, onComplete }: { initialStatus: SetupStatus; onComplete(): void }): React.JSX.Element {
-  const [page, setPage] = useState(initialStatus.runtimeReady ? 3 : 0)
+  const hasExistingModel = initialStatus.activeModel !== null && initialStatus.installedModelIds.includes(initialStatus.activeModel)
+  const [page, setPage] = useState(initialStatus.runtimeReady ? 3 : hasExistingModel ? 2 : 0)
   const [system, setSystem] = useState<SystemInfo | null>(null)
   const [models, setModels] = useState<ModelView[]>([])
   const [progress, setProgress] = useState<Record<string, DownloadProgress>>({})
@@ -26,13 +27,17 @@ export function SetupWizard({ initialStatus, onComplete }: { initialStatus: Setu
 
   const overall = useMemo(() => {
     const values = Object.values(progress).filter((item) => !item.artifactId.startsWith('model-'))
-    const expected = system?.platform === 'win32' ? 2 : 3
+    const expected = system?.platform === 'win32' ? 3 : 4
     return values.length ? values.reduce((sum, item) => sum + item.percent, 0) / expected : initialStatus.runtimeReady ? 100 : 0
   }, [progress, initialStatus.runtimeReady, system?.platform])
 
   const installRuntime = async (): Promise<void> => {
     setBusy(true); setError(null)
-    try { await window.localScribe.setup.installRuntime(); setPage(3) } catch (cause) { setError(errorMessage(cause)) } finally { setBusy(false) }
+    try {
+      const status = await window.localScribe.setup.installRuntime()
+      if (status.activeModel && status.installedModelIds.includes(status.activeModel)) { setSelected(status.activeModel); setPage(4) }
+      else setPage(3)
+    } catch (cause) { setError(errorMessage(cause)) } finally { setBusy(false) }
   }
   const downloadModel = async (id: ModelId): Promise<void> => {
     setBusy(true); setError(null); setSelected(id)
@@ -110,6 +115,7 @@ export function SetupWizard({ initialStatus, onComplete }: { initialStatus: Setu
             <ComponentRow icon={<Download />} name="FFmpeg" note="Converts video and audio into transcription-ready sound" ready={initialStatus.runtimeReady || overall === 100} progress={Object.values(progress).find((p) => p.artifactId.includes('ffmpeg') || p.artifactId.includes('media'))} />
             <ComponentRow icon={<Database />} name="ffprobe" note="Reads media metadata without opening the whole file" ready={initialStatus.runtimeReady || overall === 100} progress={Object.values(progress).find((p) => p.artifactId.includes('ffprobe') || p.artifactId.includes('media'))} />
             <ComponentRow icon={<Cpu />} name="Whisper Runtime" note="Runs speech recognition locally in an isolated process" ready={initialStatus.runtimeReady || overall === 100} progress={Object.values(progress).find((p) => p.artifactId.includes('whisper'))} />
+            <ComponentRow icon={<AudioWaveform />} name="Voice detection" note="Finds spoken sections and ignores silence locally" ready={initialStatus.runtimeReady || overall === 100} progress={Object.values(progress).find((p) => p.artifactId.includes('vad-'))} />
           </div>
           {busy && <div className="mt-6"><div className="mb-2 flex justify-between text-sm text-[var(--muted)]"><span>Overall setup progress</span><span>{Math.round(overall)}%</span></div><ProgressBar value={overall} label="Overall setup" /></div>}
           <button className="button-primary mt-8" disabled={busy} onClick={() => void installRuntime()}>{busy ? 'Installing…' : initialStatus.runtimeReady ? 'Continue' : 'Download components'} <ChevronRight size={18} /></button>
@@ -125,7 +131,7 @@ export function SetupWizard({ initialStatus, onComplete }: { initialStatus: Setu
           <div className="mx-auto grid size-20 place-items-center rounded-full border border-[#2f7656] bg-[#173326] text-[var(--success)]"><CheckCircle2 size={38} /></div>
           <h1 className="mt-7 text-4xl font-bold">LocalScribe is ready.</h1><p className="mt-3 text-lg text-[var(--muted)]">Everything needed for private, offline transcription is installed.</p>
           <div className="panel mx-auto mt-8 max-w-md rounded-2xl p-5 text-left text-sm">
-            <ReadyRow text="FFmpeg installed" /><ReadyRow text="Whisper runtime installed" /><ReadyRow text={`${models.find((m) => m.id === selected)?.name ?? selected} model installed`} />
+            <ReadyRow text="FFmpeg installed" /><ReadyRow text="Whisper runtime installed" /><ReadyRow text="Voice detection installed" /><ReadyRow text={`${models.find((m) => m.id === selected)?.name ?? selected} model installed`} />
           </div>
           <button className="button-primary mt-8 !min-h-12 !px-7" disabled={busy} onClick={() => void finish()}>{busy ? 'Opening…' : 'Start LocalScribe'} <ChevronRight size={18} /></button>
         </div>}

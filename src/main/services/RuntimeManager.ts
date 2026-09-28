@@ -2,7 +2,7 @@ import { access, chmod, mkdir, rename, rm, stat, unlink } from 'node:fs/promises
 import { join } from 'node:path'
 import type { ArtifactDefinition, DownloadProgress, SetupStatus, SupportedPlatform } from '../../shared/types'
 import { modelList } from '../manifests/modelManifest'
-import { getRuntimeArtifacts, isWhisperArtifact, MEDIA_VERSION } from '../manifests/runtimeManifest'
+import { getRuntimeArtifacts, isVadArtifact, isWhisperArtifact, MEDIA_VERSION } from '../manifests/runtimeManifest'
 import { verifyChecksum } from '../utils/checksum'
 import { extractExpectedZipFiles } from '../utils/extractZip'
 import type { DownloadManager } from './DownloadManager'
@@ -46,7 +46,10 @@ export class RuntimeManager {
   async install(onProgress: (progress: DownloadProgress) => void, force = false): Promise<SetupStatus> {
     if (!this.platform) throw new Error(`LocalScribe does not support ${process.platform} ${process.arch}`)
     for (const artifact of getRuntimeArtifacts(this.platform)) {
-      if (!force && await this.isValid(artifact)) continue
+      if (!force && await this.isValid(artifact)) {
+        onProgress({ artifactId: artifact.id, stage: 'complete', downloadedBytes: artifact.downloadSize, totalBytes: artifact.downloadSize, percent: 100, bytesPerSecond: 0 })
+        continue
+      }
       await this.installArtifact(artifact, onProgress)
     }
     return this.getStatus()
@@ -61,8 +64,11 @@ export class RuntimeManager {
     if (!this.platform) return this.getStatus()
     for (const artifact of getRuntimeArtifacts(this.platform)) {
       const archive = join(this.paths.downloads, `${artifact.id}-${artifact.version}.archive`)
+      const checksumTarget = artifact.archiveType === 'none'
+        ? join(this.paths.artifactDirectory(artifact.id, artifact.version), artifact.expectedFiles[0]!)
+        : archive
       let valid = false
-      try { valid = await verifyChecksum(archive, artifact.checksum) } catch { valid = false }
+      try { valid = await verifyChecksum(checksumTarget, artifact.checksum) } catch { valid = false }
       if (!valid || !(await this.isValid(artifact))) await this.installArtifact(artifact, onProgress)
     }
     return this.getStatus()
@@ -88,6 +94,14 @@ export class RuntimeManager {
     if (!artifact) throw new Error(`${kind} is not available for this platform`)
     const relative = artifact.expectedFiles.find((file) => file.toLowerCase().includes(kind))
     if (!relative) throw new Error(`${kind} executable is missing from the runtime manifest`)
+    return join(this.paths.artifactDirectory(artifact.id, artifact.version), relative)
+  }
+
+  getVadModelPath(): string {
+    if (!this.platform) throw new Error('Unsupported platform')
+    const artifact = getRuntimeArtifacts(this.platform).find(isVadArtifact)
+    const relative = artifact?.expectedFiles[0]
+    if (!artifact || !relative) throw new Error('The voice activity detection model is missing from the runtime manifest')
     return join(this.paths.artifactDirectory(artifact.id, artifact.version), relative)
   }
 

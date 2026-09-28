@@ -115,6 +115,19 @@ export interface MediaMetadata {
   kind: 'audio' | 'video'
   audioCodec: string
   formatName: string
+  audioStreams?: AudioStreamMetadata[]
+}
+
+export interface AudioStreamMetadata {
+  index: number
+  ordinal: number
+  codec: string
+  channels: number
+  channelLayout?: string
+  sampleRate?: number
+  language?: string
+  title?: string
+  isDefault: boolean
 }
 
 export interface TranscriptSegment {
@@ -152,6 +165,67 @@ export interface TranscriptionCompleted {
   jobId: string
   media: MediaMetadata
   modelId: ModelId
+  result: TranscriptResult
+}
+
+export const MAX_QUEUE_ITEMS = 10
+
+export type QueueItemStatus = 'QUEUED' | JobStage
+
+export interface QueueItemSettings {
+  modelId: ModelId
+  language: LanguageId
+  timestamps: boolean
+}
+
+export interface QueueAddRequest extends QueueItemSettings {
+  mediaPath: string
+}
+
+export interface QueueItem {
+  id: string
+  jobId: string | null
+  media: MediaMetadata
+  settings: QueueItemSettings
+  status: QueueItemStatus
+  progress?: TranscriptionProgress
+  error?: FriendlyError
+  historyId?: string
+  historyWarning?: string
+  createdAt: string
+}
+
+export interface QueueSnapshot {
+  items: QueueItem[]
+  activeItemId: string | null
+  availableSlots: number
+}
+
+export interface QueueResult {
+  itemId: string
+  historyId?: string
+  media: MediaMetadata
+  settings: QueueItemSettings
+  result: TranscriptResult
+}
+
+export interface HistorySummary {
+  id: string
+  fileName: string
+  mediaKind: MediaMetadata['kind']
+  durationMs: number
+  modelId: ModelId
+  requestedLanguage: LanguageId
+  detectedLanguage?: string
+  timestamps: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface HistoryRecord extends HistorySummary {
+  sizeBytes: number
+  audioCodec: string
+  formatName: string
   result: TranscriptResult
 }
 

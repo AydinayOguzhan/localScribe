@@ -5,6 +5,7 @@ export class PathService {
   readonly runtime: string
   readonly ffmpeg: string
   readonly whisper: string
+  readonly vad: string
   readonly models: string
   readonly temp: string
   readonly config: string
@@ -16,6 +17,7 @@ export class PathService {
     this.runtime = join(this.root, 'runtime')
     this.ffmpeg = join(this.runtime, 'ffmpeg')
     this.whisper = join(this.runtime, 'whisper')
+    this.vad = join(this.runtime, 'vad')
     this.models = join(this.root, 'models')
     this.temp = join(this.root, 'temp')
     this.config = join(this.root, 'config')
@@ -25,9 +27,10 @@ export class PathService {
 
   get settingsFile(): string { return join(this.config, 'settings.json') }
   get installedFile(): string { return join(this.config, 'installed-components.json') }
+  get historyFile(): string { return join(this.config, 'history.sqlite') }
 
   artifactDirectory(id: string, version: string): string {
-    const base = id.startsWith('whisper-') ? this.whisper : this.ffmpeg
+    const base = id.startsWith('whisper-') ? this.whisper : id.startsWith('vad-') ? this.vad : this.ffmpeg
     return join(base, version, id)
   }
 

@@ -4,7 +4,24 @@ export const MEDIA_VERSION = '9.0.1'
 const MAC_WHISPER_VERSION = 'openwhispr-1.0.0'
 
 const githubHosts = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']
-const evermeetHosts = ['evermeet.cx', 'deolaha.ca']
+const evermeetHosts = ['evermeet.cx', 'deolaha.ca', 'e.deolaha.ca']
+const huggingFaceHosts = ['huggingface.co', 'cdn-lfs.huggingface.co', 'cas-bridge.xethub.hf.co', 'cas-server.xethub.hf.co', 'us.aws.cdn.hf.co']
+
+const vadArtifact: ArtifactDefinition = {
+  id: 'vad-silero-v6.2.0',
+  version: '6.2.0',
+  label: 'Silero VAD',
+  description: 'Local voice activity detection model',
+  url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin',
+  allowedHosts: huggingFaceHosts,
+  archiveType: 'none',
+  downloadSize: 885_098,
+  installedSize: 885_098,
+  checksum: { algorithm: 'sha256', value: '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987' },
+  expectedFiles: ['ggml-silero-v6.2.0.bin'],
+  executableFiles: [],
+  source: 'Official ggml-org/whisper-vad Silero v6.2 model'
+}
 
 export const runtimeManifest: Record<SupportedPlatform, ArtifactDefinition[]> = {
   'win32-x64': [
@@ -48,7 +65,8 @@ export const runtimeManifest: Record<SupportedPlatform, ArtifactDefinition[]> = 
       ],
       executableFiles: ['Release/whisper-cli.exe'],
       source: 'Official ggml-org/whisper.cpp v1.9.1 CPU release'
-    }
+    },
+    vadArtifact
   ],
   'darwin-arm64': [
     {
@@ -95,7 +113,8 @@ export const runtimeManifest: Record<SupportedPlatform, ArtifactDefinition[]> = 
       expectedFiles: ['whisper-cpp-darwin-arm64'],
       executableFiles: ['whisper-cpp-darwin-arm64'],
       source: 'OpenWhispr reproducible whisper.cpp CLI Metal build'
-    }
+    },
+    vadArtifact
   ],
   'darwin-x64': [
     {
@@ -142,7 +161,8 @@ export const runtimeManifest: Record<SupportedPlatform, ArtifactDefinition[]> = 
       expectedFiles: ['whisper-cpp-darwin-x64'],
       executableFiles: ['whisper-cpp-darwin-x64'],
       source: 'OpenWhispr reproducible whisper.cpp CLI build'
-    }
+    },
+    vadArtifact
   ]
 }
 
@@ -152,4 +172,8 @@ export function getRuntimeArtifacts(platform: SupportedPlatform): ArtifactDefini
 
 export function isWhisperArtifact(artifact: ArtifactDefinition): boolean {
   return artifact.id.startsWith('whisper-')
+}
+
+export function isVadArtifact(artifact: ArtifactDefinition): boolean {
+  return artifact.id.startsWith('vad-')
 }
