@@ -28,7 +28,7 @@
     "npm": ">=10"
   },
   "dependencies": {
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^1.44.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "yauzl": "^3.4.0",
